@@ -1,0 +1,15 @@
+.porter-tmp
+.porter/hooks/.git
+.dockerignore
+.gitignore
+.gitmodules
+porter
+README.md
+# TODO: Add src/ directory to .dockerignore after ST is fully retired. Ref: https://jira.corp.adobe.com/browse/ASR-3120
+#
+# The src/ directory is not included by default since ASR generates 2 types of Dockerfile.build files:
+# One for Single Tenant / Porter (aka ST) and another for Multi-Tenant (aka MT).
+# Due to the manner of how ASR generates the ST files, adding the src directory by default will cause problems for ST clients.
+#
+# If you are an MT client, and wish to optimize your docker builds, you can uncomment the line below.
+# src

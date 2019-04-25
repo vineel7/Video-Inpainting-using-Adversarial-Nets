@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.adobe.xdmviewer</groupId>
+  <artifactId>xdmviewer</artifactId>
+  <version>0.1</version>
+
+  <parent>
+    <groupId>com.adobe.asr</groupId>
+    <artifactId>asr-parent</artifactId>
+    <!-- Please update your ASR libraries regularly for bug fixes, features, and security patches. -->
+    <!-- See https://git.corp.adobe.com/ASR/asr/releases for the latest ASR releases. -->
+    <version>7.4.0</version>
+    <relativePath/>
+  </parent>
+
+  <properties>
+    <java.version>11</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <start-class>com.adobe.xdmviewer.Application</start-class>
+  </properties>
+
+  <!-- Used to populate entries in TESSA 2.0 portal -->
+  <name>xdmviewer</name>
+  <scm>
+    <connection>scm:git:git@git.corp.adobe.com:experience-platform/xdm-viewer.git</connection>
+    <url>https://git.corp.adobe.com/experience-platform/xdm-viewer</url>
+  </scm>
+
+  <dependencies>
+
+    <dependency>
+      <groupId>com.adobe.asr</groupId>
+      <artifactId>asr-starter-springmvc-ims</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.adobe.asr</groupId>
+      <artifactId>asr-starter-springmvc-telemetry-ingest</artifactId> 
+     </dependency>
+
+
+
+    <dependency>
+      <groupId>io.springfox</groupId>
+      <artifactId>springfox-swagger-ui</artifactId> 
+    <version>2.7.0</version></dependency>
+    <dependency>
+      <groupId>io.springfox</groupId>
+      <artifactId>springfox-swagger2</artifactId> 
+    <version>2.7.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <!-- The tessa maven plugin will upload all the service dependency info to the Tessa dependency DB at snitch.corp.adobe.com for your ASSET review -->
+      <!-- To test locally use 'mvn tessa:list-local' In this case - no http requests are sent to Tessa, hence no API key is needed-->
+      <!-- When creating a release build, set the TESSA2_API_KEY env var and build 'mvn tessa:update' to trigger the plugin -->
+	  <!-- Refer https://git.corp.adobe.com/SharedCloud/tessa-maven-plugin for more details -->
+      <plugin>
+        <groupId>com.adobe.sharedcloud</groupId>
+        <artifactId>tessa-maven-plugin</artifactId>
+        <configuration>
+          <host>snitch.corp.adobe.com</host>
+        </configuration>
+      </plugin>
+      <!-- The git commit ID plugin. This injects the commit ID for the /version api. Requires maven 3.1.1 or later -->
+      <plugin>
+        <groupId>pl.project13.maven</groupId>
+        <artifactId>git-commit-id-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+   <interactiveMode>false</interactiveMode>
+   <mirrors>
+      <mirror>
+         <id>central-artifactory</id>
+         <name>Artifactory Central</name>
+         <url>https://artifactory.corp.adobe.com/artifactory/central-maven-remote</url>
+         <mirrorOf>central</mirrorOf>
+      </mirror>
+   </mirrors>
+   <servers>
+      <server>
+          <id>asr-releases</id>
+          <username>${env.ARTIFACTORY_USER}</username>
+          <password>${env.ARTIFACTORY_API_TOKEN}</password>
+      </server>
+      <server>
+        <id>asr-snapshots</id>
+        <username>${env.ARTIFACTORY_USER}</username>
+        <password>${env.ARTIFACTORY_API_TOKEN}</password>
+      </server>
+      <server>
+          <id>central-artifactory</id>
+          <username>${env.ARTIFACTORY_USER}</username>
+          <password>${env.ARTIFACTORY_API_TOKEN}</password>
+      </server>
+
+   </servers>
+   <profiles>
+      <profile>
+         <id>default</id>
+         <activation>
+            <activeByDefault>true</activeByDefault>
+         </activation>
+         <properties>
+            <maven.test.failure.ignore>false</maven.test.failure.ignore>
+         </properties>
+         <pluginRepositories>
+             <pluginRepository>
+                <id>asr-releases</id>
+                <url>https://artifactory.corp.adobe.com/artifactory/maven-asr-release</url>
+            </pluginRepository>
+            <pluginRepository>
+               <id>central-artifactory</id>
+               <url>https://artifactory.corp.adobe.com/artifactory/central-maven-remote</url>
+            </pluginRepository>
+         </pluginRepositories>
+         <repositories>
+            <repository>
+                <id>asr-releases</id>
+                <name>ASR Releases</name>
+                <url>https://artifactory.corp.adobe.com/artifactory/maven-asr-release</url>
+                <snapshots>
+                    <enabled>false</enabled>
+                </snapshots>
+                <releases>
+                    <enabled>true</enabled>
+                    <updatePolicy>always</updatePolicy>
+                </releases>
+            </repository>
+            <repository>
+               <id>asr-snapshots</id>
+               <name>ASR Snapshots</name>
+               <url>https://artifactory.corp.adobe.com/artifactory/maven-asr-snapshot</url>
+               <snapshots>
+                  <enabled>true</enabled>
+               </snapshots>
+            </repository>
+
+         </repositories>
+      </profile>
+   </profiles>
+</settings>
