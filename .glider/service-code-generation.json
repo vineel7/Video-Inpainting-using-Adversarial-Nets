@@ -1,0 +1,32 @@
+{
+  "version" : 1,
+  "actionId" : "service-code-generation",
+  "userInputs" : {
+    "gitorgname" : "experience-platform",
+    "gitreponame" : "xdm-viewer",
+    "javaversion" : "v11",
+    "asrfeatures" : "telemetry,ims",
+    "otherfeatures" : "Swagger UI",
+    "nginx" : "no",
+    "class" : "AppServer",
+    "rubyversion" : "v2",
+    "goversion" : "v1",
+    "appname" : "xdmviewer",
+    "language" : "java",
+    "technology" : "springboot",
+    "category" : "",
+    "java_springboot_tessa_info_box" : "For tessa report click <a target=\"_blank\" href=\"https://snitch.corp.adobe.com/#product/java:maven:com.adobe.asr.example:asr-example:latest\">here</a>",
+    "springboot_web_container" : "tomcat",
+    "restframework" : "springmvc",
+    "datadog" : "no",
+    "service_configuration_file_type" : "properties",
+    "tenancy" : "multi",
+    "serviceclientid" : "xdmviewer1",
+    "version" : "0.1",
+    "groupid" : "com.adobe.xdmviewer",
+    "artifactid" : "xdmviewer",
+    "pkgname" : "com.adobe.xdmviewer",
+    "apiname" : "myfirstapi",
+    "apiclass" : "MyFirstApiResource"
+  }
+}
