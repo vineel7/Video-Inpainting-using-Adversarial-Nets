@@ -50,12 +50,6 @@ team_access_control:
     # Mandatory
     # Array of roles. Allowed value are one or more of the pre-defined roles mentioned above.
     roles: [ethos_deployments_admin]
-  -
-    name: ACP-XDMR-INDIA
-    # Default value for role is 'ethos_deployments_deployer'.
-    # roles: [ethos_deployments_deployer]
-
-
 
 images:
   - id: xdmviewer-img
