@@ -6,7 +6,7 @@
 
   <groupId>com.adobe.xdmviewer</groupId>
   <artifactId>xdmviewer</artifactId>
-  <version>0.1</version>
+  <version>0.2</version>
 
   <parent>
     <groupId>com.adobe.asr</groupId>
