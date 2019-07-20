@@ -1,0 +1,244 @@
+#      script for training 5in3 model with generator parameters loaded from 3in1
+import numpy as np
+import tensorflow as tf
+import cv2
+import tqdm
+from network_5in3_v1 import Network
+import load
+import logging
+from imutils import face_utils
+import imutils
+import dlib
+
+
+IMAGE_SIZE = 128
+IMAGE_DEPTH = 5  # no of frames
+LOCAL_SIZE = 64
+HOLE_MIN = 24
+HOLE_MAX = 48
+LEARNING_RATE = 1e-3
+BATCH_SIZE = 8
+BATCH_FRAME_SIZE = IMAGE_DEPTH*BATCH_SIZE   # batch size times frame size
+PRETRAIN_EPOCH = 20
+Td_EPOCH = 10
+Tot_EPOCH = 60 
+
+logging.basicConfig(level=logging.DEBUG, filename='/home/avisek/vineel/glcic-master/5_in_3_video/lossvalues_prevcor.log',filemode='a+',format='%(asctime)s %(message)s')
+
+dir1='/home/avisek/vineel/glcic-master/5_in_3_video/output_5in3_prevcor/'
+dir2='/home/avisek/vineel/glcic-master/5_in_3_video/original_5in3_prevcor/'
+dir3='/home/avisek/vineel/glcic-master/5_in_3_video/perturbed_5in3_prevcor/'
+
+detector = dlib.get_frontal_face_detector()
+
+def train():
+    x = tf.placeholder(tf.float32, [BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3])
+    mask = tf.placeholder(tf.float32, [BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1])
+    local_x = tf.placeholder(tf.float32, [BATCH_SIZE, 3, LOCAL_SIZE, LOCAL_SIZE, 3])
+    is_training = tf.placeholder(tf.bool, [])
+    points = tf.placeholder(tf.int32, [BATCH_SIZE, 3, 4])
+
+    model = Network(x, mask, points, local_x, is_training, batch_size=BATCH_SIZE)
+    sess = tf.Session()
+    global_step = tf.Variable(0, name='global_step', trainable=False)
+    epoch = tf.Variable(0, name='epoch', trainable=False)
+
+    g_train_op = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(model.g_loss, global_step=global_step, var_list=model.g_variables)
+    d_train_op = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(model.d_loss, global_step=global_step, var_list=model.d_variables)
+    combined_op = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE).minimize(model.combined_loss, global_step=global_step, var_list=model.g_variables)
+
+    #init_op = tf.global_variables_initializer()
+    #sess.run(init_op)
+
+    variables_gen_restore = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='generator')
+    checkpoint_path_gen = '/home/avisek/vineel/glcic-master/3_in_1_video/backup_crop_vid_celebA/latest'
+    saver_pre_gen = tf.train.Saver(variables_gen_restore)
+    saver_pre_gen.restore(sess, checkpoint_path_gen)
+
+    variables_inpaint = tf.trainable_variables()
+    variables_inpaint_toinitialize = [var for var in variables_inpaint if var not in variables_gen_restore]
+    init_op = tf.initializers.variables(variables_inpaint_toinitialize)
+    sess.run(init_op)
+    print(variables_gen_restore)
+    print(variables_inpaint_toinitialize)
+
+    """ if tf.train.get_checkpoint_state('/home/avisek/vineel/glcic-master/5_in_3_video/backup'):
+        saver = tf.train.Saver()
+        saver.restore(sess, '/home/avisek/vineel/glcic-master/5_in_3_video/backup/') """
+
+    print('restoring model done.. loading numpy')
+
+    x_train, x_test = load.load()
+    print('loading numpy done.. normalizing')
+    x_train = np.array([a / 127.5 - 1 for a in x_train])
+    x_test = np.array([a / 127.5 - 1 for a in x_test])
+
+    print('normalization done..')
+
+    step_num = int(len(x_train) / BATCH_FRAME_SIZE)
+
+    while sess.run(epoch) < Tot_EPOCH:
+        sess.run(tf.assign(epoch, tf.add(epoch, 1)))
+        print('epoch: {}'.format(sess.run(epoch)))
+
+
+        #=======================================    Completion network - phase 1 =========================================================
+        if sess.run(epoch) <= PRETRAIN_EPOCH:
+            tot_loss = 0
+            for i in tqdm.tqdm(range(step_num)):
+                x_batch = x_train[i * BATCH_FRAME_SIZE:(i + 1) * BATCH_FRAME_SIZE]
+                points_batch, mask_batch = get_points2(x_batch)
+                x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+                mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to 5D
+
+                _, g_loss = sess.run([g_train_op, model.g_loss], feed_dict={x: x_batch, mask: mask_batch, is_training: True})
+                tot_loss += g_loss
+                if i%50==0:
+                    print('epoch--'+str(sess.run(epoch))+'   Completion loss: {}'.format(g_loss))
+                    #logging.info('epoch: %s   batch: %s   Completion loss:  %s  ', str(sess.run(epoch)),str(i),str(g_loss))
+            avg_loss = tot_loss/step_num
+            print('epoch--'+str(sess.run(epoch))+'   Completion loss: {}'.format(avg_loss))
+            logging.info('epoch: %s   Completion loss:  %s  ', str(sess.run(epoch)),str(avg_loss))
+            step_num2 = int(len(x_test) / BATCH_FRAME_SIZE)
+            gc_loss=0
+            for i in range(step_num2):
+                x_batch = x_test[i * BATCH_FRAME_SIZE:(i + 1) * BATCH_FRAME_SIZE]
+                points_batch, mask_batch = get_points2(x_batch)
+                x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+                mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to 5D
+                completion2, c_loss = sess.run([model.completion_3d, model.g_loss], feed_dict={x: x_batch, mask: mask_batch, is_training: False})
+                gc_loss += c_loss;
+
+            gc_loss /= step_num2
+            cnt = sess.run(epoch)
+            x_batch = x_test[:BATCH_FRAME_SIZE]
+            _, mask_batch = get_points2(x_batch)
+            x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+            mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to  5D
+            x_pert = x_batch * (1-mask_batch)
+            completion = sess.run(model.completion_3d, feed_dict={x: x_batch, mask: mask_batch, is_training: False})
+            save_samples(dir1, cnt,gc_loss, completion)
+            save_samples(dir2, cnt,gc_loss, x_batch[:, 1:4, :, :, :])
+            save_samples(dir3, cnt,gc_loss, x_pert[:, 1:4, :, :, :])
+            saver = tf.train.Saver()
+            saver.save(sess, './backup/latest', write_meta_graph=False)
+            saver.save(sess, './backup/'+str(sess.run(epoch)), write_meta_graph=False)
+
+        #=======================================    Discrimitation network - phase 2 ========================================================
+        elif sess.run(epoch) <= (PRETRAIN_EPOCH+Td_EPOCH):
+            tot_loss = 0
+            for i in tqdm.tqdm(range(step_num)):
+                x_batch = x_train[i * BATCH_FRAME_SIZE:(i + 1) * BATCH_FRAME_SIZE]
+                points_batch, mask_batch = get_points2(x_batch)
+                x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+                mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to 5D
+                points_batch = points_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, 4)  # reshaping to 5D
+                points_batch = points_batch[:, 1:4, :]
+                local_x_batch = []
+
+                for j in range(BATCH_SIZE):
+                	for k in range(3):
+                		x1, y1, x2, y2 = points_batch[j][k]
+                		local_x_batch.append(x_batch[j][1+k][int(y1):int(y2), int(x1):int(x2), :])
+                local_x_batch = np.array(local_x_batch)
+                local_x_batch = local_x_batch.reshape(BATCH_SIZE, 3, LOCAL_SIZE, LOCAL_SIZE, 3)
+
+
+                _, d_loss, dfake_loss = sess.run(
+                    [d_train_op, model.d_loss, model.dfake_loss],
+                    feed_dict={x: x_batch, mask: mask_batch, points: points_batch, local_x: local_x_batch, is_training: True})
+                tot_loss += d_loss
+                if i%50==0:
+                    print('epoch--'+str(sess.run(epoch))+'   Discriminator loss: {}'.format(d_loss))
+                    #logging.info('epoch: %s batch:  %s Discriminator loss:  %s GAN loss:  %s ', str(sess.run(epoch)),str(i), str(d_loss), str(dfake_loss))
+            step_num2 = int(len(x_test) / BATCH_FRAME_SIZE)
+            gc_loss=0
+            avg_loss = tot_loss/step_num
+            logging.info('epoch: %s Discriminator loss:  %s GAN loss:  %s ', str(sess.run(epoch)), str(avg_loss), str(dfake_loss))
+            for i in range(step_num2):
+                x_batch = x_test[i * BATCH_FRAME_SIZE:(i + 1) * BATCH_FRAME_SIZE]
+                points_batch, mask_batch = get_points2(x_batch)
+                x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+                mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to 5D
+                completion2, c_loss = sess.run([model.completion_3d, model.g_loss], feed_dict={x: x_batch, mask: mask_batch, is_training: False})
+                gc_loss += c_loss
+
+            gc_loss /= step_num2
+            cnt = sess.run(epoch)
+            x_batch = x_test[:BATCH_FRAME_SIZE]
+            _, mask_batch = get_points2(x_batch)
+            x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+            mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to  5D
+            x_pert = x_batch * (1-mask_batch)
+            completion = sess.run(model.completion_3d, feed_dict={x: x_batch, mask: mask_batch, is_training: False})
+            save_samples(dir1, cnt,gc_loss, completion)
+            save_samples(dir2, cnt,gc_loss, x_batch[:, 1:4, :, :, :])
+            save_samples(dir3, cnt,gc_loss, x_pert[:, 1:4, :, :, :])
+            saver = tf.train.Saver()
+            saver.save(sess, './backup/latest', write_meta_graph=False)
+            saver.save(sess, './backup/'+str(sess.run(epoch)), write_meta_graph=False)
+        # ==================================== generator & discriminator networks - Phase 3 =========================================
+        else:
+            tot_gloss = 0
+            tot_dloss = 0
+            tot_closs = 0
+            for i in tqdm.tqdm(range(step_num)):
+                x_batch = x_train[i * BATCH_FRAME_SIZE:(i + 1) * BATCH_FRAME_SIZE]
+                points_batch, mask_batch = get_points2(x_batch)
+                x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+                mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to 5D
+                points_batch = points_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, 4)  # reshaping to 5D
+                points_batch = points_batch[:, 1:4, :]
+                local_x_batch = []
+                for j in range(BATCH_SIZE):
+                	for k in range(3):
+                        	x1, y1, x2, y2 = points_batch[j][k]
+                        	local_x_batch.append(x_batch[j][1+k][int(y1):int(y2), int(x1):int(x2), :])
+                local_x_batch = np.array(local_x_batch)
+                local_x_batch = local_x_batch.reshape(BATCH_SIZE, 3, LOCAL_SIZE, LOCAL_SIZE, 3)
+
+                _, d_loss = sess.run(
+                    [d_train_op, model.d_loss],
+                    feed_dict={x: x_batch, mask: mask_batch, points: points_batch, local_x: local_x_batch, is_training: True})
+                
+                _, combined_loss, g_loss, dfake_loss = sess.run([combined_op, model.combined_loss, model.g_loss, model.dfake_loss], feed_dict={x: x_batch, mask: mask_batch, points: points_batch, local_x: local_x_batch, is_training: True})
+                tot_gloss += g_loss
+                tot_closs += combined_loss
+                tot_dloss += d_loss
+                if i%50==0:
+                    #print('Combined loss: {}'.format(combined_loss))
+                    print('epoch--'+str(sess.run(epoch))+'   Combined loss: {}'.format(combined_loss))
+                    #print('Discriminator loss: {}'.format(d_loss))
+                    print('epoch--'+str(sess.run(epoch))+'   Discriminator loss: {}'.format(d_loss))
+                    print('epoch--'+str(sess.run(epoch))+'   MSE loss: {}'.format(g_loss))
+                    print('epoch--'+str(sess.run(epoch))+'   GAN loss: {}'.format(dfake_loss))
+                    #logging.info('epoch: %s batch:  %s combined loss:  %s Discriminator loss:  %s ', str(sess.run(epoch)), str(i),str(combined_loss), str(d_loss))
+                    #logging.info('epoch: %s batch:  %s MSE loss:  %s GAN loss: %s', str(sess.run(epoch)), str(i),str(g_loss),str(dfake_loss))
+            avg_gloss = tot_gloss/step_num
+            avg_closs = tot_closs/step_num
+            avg_dloss = tot_dloss/step_num
+            logging.info('epoch: %s combined loss:  %s Discriminator loss:  %s ', str(sess.run(epoch)), str(avg_closs), str(avg_dloss))
+            logging.info('epoch: %s MSE loss:  %s GAN loss: %s', str(sess.run(epoch)), str(avg_gloss),str(dfake_loss))
+            step_num2 = int(len(x_test) / BATCH_FRAME_SIZE)
+            gc_loss=0
+            for i in range(step_num2):
+                x_batch = x_test[i * BATCH_FRAME_SIZE:(i + 1) * BATCH_FRAME_SIZE]
+                points_batch, mask_batch = get_points2(x_batch)
+                x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+                mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to 5D
+                completion2, c_loss = sess.run([model.completion_3d, model.g_loss], feed_dict={x: x_batch, mask: mask_batch, is_training: False})
+                gc_loss += c_loss;
+
+            gc_loss /= step_num2
+            cnt = sess.run(epoch)
+            x_batch = x_test[:BATCH_FRAME_SIZE]
+            _, mask_batch = get_points2(x_batch)
+            x_batch = x_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 3)  # reshaping to 5D
+            mask_batch = mask_batch.reshape(BATCH_SIZE, IMAGE_DEPTH, IMAGE_SIZE, IMAGE_SIZE, 1)  # reshaping to  5D
+            x_pert = x_batch * (1-mask_batch)
+            completion = sess.run(model.completion_3d, feed_dict={x: x_batch, mask: mask_batch, is_training: False})
+            #img_tile(dir1, cnt,gc_loss, completion[:, 1, :, :, :])
+            #img_tile2(dir2, cnt,gc_loss, x_batch[:, 2, :, :, :])
+            #img_tile2(dir3, cnt,gc_loss, x_pert[:, 2, :, :, :])
+            save_samples(dir1, cnt,gc_loss, completion)
+            save_samples(dir2, cnt,gc_loss, x_batch[:, 1:4, :, :, :])
