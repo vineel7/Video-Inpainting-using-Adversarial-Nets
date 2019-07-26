@@ -79,6 +79,8 @@ environments:
         # By default, Glider creates services that are only accessible via Adobe egress IPs.
         # If you wish to change this behavior, see https://git.corp.adobe.com/adobe-platform/service-spec/blob/f7d7969177b9eddad9b7bc991f4fbbab506b5fd8/spec.yaml#L341-L352
         access_level: corp
+        dns:
+          prefix: xdmviewer-dev2-va6
      
     regions:
         - name: va6
