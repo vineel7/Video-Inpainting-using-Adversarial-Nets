@@ -124,5 +124,3 @@ To enable TESSA, you may need to [setup](https://git.corp.adobe.com/SharedCloud/
 ### References
 
   * Base image: https://git.corp.adobe.com/ASR/bbc-factory/blob/master/README.md
-
-### Dummy comment 
