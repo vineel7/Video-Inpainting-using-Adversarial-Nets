@@ -46,7 +46,7 @@ team_access_control:
   -
     # Mandatory
     # Name of one of Github teams attached with this repository.
-    name: ACP-XDMR-INDIA
+    name: admin-team
     # Mandatory
     # Array of roles. Allowed value are one or more of the pre-defined roles mentioned above.
     roles: [ethos_deployments_admin]
